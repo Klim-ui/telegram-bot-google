@@ -1,0 +1,43 @@
+# Конфиденциальные данные
+config.env
+*.db
+credentials.json
+token.pickle
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Логи
+*.log
+logs/
+
+# Временные файлы
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Базы данных
+*.sqlite
+*.sqlite3
+
+# Кэш
+.cache/
+.pytest_cache/ 
