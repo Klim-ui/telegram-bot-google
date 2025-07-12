@@ -41,6 +41,13 @@ async def init_db():
 async def is_authorized(user_id: int) -> bool:
     return user_id in ALLOWED_USERS
 
+async def get_user_department(user_id: int) -> str | None:
+    """Получить отдел пользователя"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT department FROM users WHERE tg_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -65,12 +72,62 @@ async def cmd_help(message: Message):
                         "/help — эта справка\n"
                         "/docs — показать список документов\n"
                         "/search — поиск по документам (напиши вопрос)\n"
-                        "/myid — узнать свой Telegram ID\n\n"
+                        "/myid — узнать свой Telegram ID\n"
+                        "/admin — админ-панель (только для админов)\n\n"
                         "💡 Просто напиши свой вопрос, и я найду ответ в документах!")
 
 @dp.message(Command("myid"))
 async def cmd_myid(message: Message):
     await message.answer(f"Твой Telegram ID: {message.from_user.id}")
+
+@dp.message(Command("admin"))
+async def cmd_admin(message: Message):
+    """Админ-панель"""
+    if not await is_authorized(message.from_user.id):
+        return
+    
+    user_department = await get_user_department(message.from_user.id)
+    if user_department != "admin":
+        await message.answer("⛔️ Доступ только для администраторов.")
+        return
+    
+    await message.answer("🔧 Админ-панель\n\n"
+                        "Доступные команды:\n"
+                        "/users - список пользователей\n"
+                        "/adduser - добавить пользователя\n"
+                        "/deluser - удалить пользователя")
+
+@dp.message(Command("users"))
+async def cmd_users(message: Message):
+    """Список пользователей"""
+    if not await is_authorized(message.from_user.id):
+        return
+    
+    user_department = await get_user_department(message.from_user.id)
+    if user_department != "admin":
+        await message.answer("⛔️ Доступ только для администраторов.")
+        return
+    
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT tg_id, name, department, role FROM users") as cursor:
+                users = await cursor.fetchall()
+        
+        if not users:
+            await message.answer("📭 Пользователи не найдены.")
+            return
+        
+        users_list = "👥 Список пользователей:\n\n"
+        for user in users:
+            users_list += f"ID: {user[0]}\n"
+            users_list += f"Имя: {user[1]}\n"
+            users_list += f"Отдел: {user[2]}\n"
+            users_list += f"Роль: {user[3]}\n\n"
+        
+        await message.answer(users_list)
+        
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при получении списка пользователей: {str(e)}")
 
 @dp.message(Command("docs"))
 async def cmd_docs(message: Message):
@@ -131,9 +188,18 @@ async def handle_search_query(message: Message):
             await message.answer("📭 Документы не найдены.")
             return
         
+        # Получаем отдел пользователя
+        user_department = await get_user_department(message.from_user.id)
+        
         # Загружаем содержимое документов
         docs_with_content = []
         for doc in documents[:5]:  # Ограничиваем количество для производительности
+            # Фильтрация по отделам (если настроена)
+            if user_department and user_department != "admin":
+                # В реальном проекте здесь была бы проверка по метаданным документа
+                # Пока пропускаем все документы
+                pass
+            
             content = gdrive_service.get_document_content(doc['id'], doc['mimeType'])
             docs_with_content.append({
                 'name': doc['name'],
